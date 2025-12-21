@@ -8,4 +8,8 @@ export const stackClientApp = new StackClientApp({
     afterSignIn: "/dashboard",
     afterSignUp: "/dashboard",
   },
+  // Explicitly set the base URL for production
+  ...(typeof window !== "undefined" && {
+    baseUrl: window.location.origin,
+  }),
 });
