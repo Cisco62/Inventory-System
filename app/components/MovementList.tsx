@@ -1,4 +1,6 @@
 import Link from "next/link";
+import type { Prisma } from "@prisma/client";
+import { formatNaira } from "../lib/format";
 import { formatChange, MOVEMENT_META, type MovementType } from "../lib/movements";
 
 export type MovementRow = {
@@ -8,6 +10,8 @@ export type MovementRow = {
   quantityAfter: number;
   note: string | null;
   createdAt: Date;
+  unitPrice?: Prisma.Decimal | null;
+  unitCost?: Prisma.Decimal | null;
   product?: { id: string; name: string };
 };
 
@@ -35,6 +39,16 @@ function formatWhen(date: Date) {
     timeZone: TIME_ZONE,
   });
   return `${day}, ${time}`;
+}
+
+function priceDetail(m: MovementRow) {
+  if (m.type === "SOLD" && m.unitPrice != null) {
+    return `@ ${formatNaira(m.unitPrice.toNumber())}`;
+  }
+  if (m.type === "RECEIVED" && m.unitCost != null) {
+    return `@ ${formatNaira(m.unitCost.toNumber())} cost`;
+  }
+  return null;
 }
 
 export default function MovementList({
@@ -70,8 +84,7 @@ export default function MovementList({
                 </span>
               </div>
               <p className="mt-0.5 truncate text-xs text-slate-500">
-                {formatWhen(m.createdAt)}
-                {m.note ? ` · ${m.note}` : ""}
+                {[formatWhen(m.createdAt), priceDetail(m), m.note].filter(Boolean).join(" · ")}
               </p>
             </div>
             <div className="shrink-0 text-right">

@@ -19,6 +19,8 @@ model Product {
   name String
   sku String?
   price Decimal @db.Decimal(12,2)
+  /// What one unit costs you (optional). Used for profit and margin.
+  costPrice Decimal? @db.Decimal(12,2)
   quantity Int @default(0)
   lowStockAt Int?
 
@@ -51,6 +53,10 @@ model StockMovement {
   /// Product quantity right after this movement.
   quantityAfter Int
   note          String?
+  /// Selling price per unit at the time (the actual sale price for SOLD).
+  unitPrice     Decimal?     @db.Decimal(12, 2)
+  /// Cost per unit at the time (what was paid for RECEIVED).
+  unitCost      Decimal?     @db.Decimal(12, 2)
   createdAt     DateTime     @default(now())
 
   @@index([userId, createdAt])

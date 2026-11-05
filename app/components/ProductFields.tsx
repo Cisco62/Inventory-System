@@ -80,33 +80,41 @@ export default function ProductFields({
       </Field>
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-        <Field id="quantity" label="Quantity *" error={errors.quantity}>
-          <input type="number" min="0" step="1" required placeholder="0" {...a11y("quantity")} />
-        </Field>
-        <Field id="price" label="Price (₦) *" error={errors.price}>
+        <Field id="price" label="Selling price (₦) *" error={errors.price}>
           <input type="number" min="0" step="0.01" required placeholder="0.00" {...a11y("price")} />
+        </Field>
+        <Field
+          id="costPrice"
+          label="Cost price (₦, optional)"
+          error={errors.costPrice}
+          hint="What one unit costs you. Used for profit."
+        >
+          <input type="number" min="0" step="0.01" placeholder="0.00" {...a11y("costPrice")} />
         </Field>
       </div>
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <Field id="quantity" label="Quantity *" error={errors.quantity}>
+          <input type="number" min="0" step="1" required placeholder="0" {...a11y("quantity")} />
+        </Field>
+        <Field
+          id="lowStockAt"
+          label="Low stock alert (optional)"
+          error={errors.lowStockAt}
+          hint="Marked low at or below this. Default 5."
+        >
+          <input type="number" min="0" step="1" placeholder="5" {...a11y("lowStockAt")} />
+        </Field>
+      </div>
+
       <Field
         id="sku"
         label="SKU (optional)"
         error={errors.sku}
         hint="Your own code for this product."
       >
-        <input type="text" placeholder="e.g. TSHIRT-RED-M" {...a11y("sku")} />
+        <input type="text" placeholder="e.g. COKE-50CL" {...a11y("sku")} />
       </Field>
-
-      <Field
-        id="lowStockAt"
-        label="Low stock alert (optional)"
-        error={errors.lowStockAt}
-        hint="Marked low at or below this. Default 5."
-      >
-        <input type="number" min="0" step="1" placeholder="5" {...a11y("lowStockAt")} />
-      </Field>
-      </div>
     </>
   );
 }

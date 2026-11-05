@@ -11,6 +11,7 @@ interface Product {
   id: string;
   name: string;
   price: number;
+  costPrice: number | null;
   quantity: number;
   sku: string | null;
   lowStockAt: number | null;

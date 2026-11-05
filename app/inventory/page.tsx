@@ -95,6 +95,7 @@ export default async function InventoryPage({
       id: product.id,
       name: product.name,
       price: product.price.toNumber(),
+      costPrice: product.costPrice?.toNumber() ?? null,
       quantity: product.quantity,
       sku: product.sku,
       lowStockAt: product.lowStockAt,

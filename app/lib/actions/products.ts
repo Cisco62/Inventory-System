@@ -20,11 +20,21 @@ const optionalInt = z.preprocess(
     .nullable()
 );
 
+const optionalMoney = z.preprocess(
+  (v) => (typeof v === "string" && v.trim() !== "" ? v : null),
+  z.coerce
+    .number({ message: "Must be a number" })
+    .nonnegative("Cannot be negative")
+    .max(1_000_000_000, "That's too high")
+    .nullable()
+);
+
 const ProductSchema = z.object({
   name: z.string().trim().min(1, "Product name is required").max(120),
   price: z.coerce
     .number({ message: "Price must be a number" })
     .nonnegative("Price cannot be negative"),
+  costPrice: optionalMoney,
   quantity: z.coerce
     .number({ message: "Quantity must be a number" })
     .int("Quantity must be a whole number")
@@ -46,6 +56,7 @@ function readForm(formData: FormData) {
   return {
     name: get("name"),
     price: get("price"),
+    costPrice: get("costPrice"),
     quantity: get("quantity"),
     sku: get("sku"),
     lowStockAt: get("lowStockAt"),
@@ -132,6 +143,8 @@ export async function updateProduct(
             change,
             quantityAfter: result.data.quantity,
             note: "Quantity edited",
+            unitPrice: result.data.price,
+            unitCost: result.data.costPrice,
           },
         });
       }
@@ -169,6 +182,8 @@ export async function createProduct(
             change: result.data.quantity,
             quantityAfter: result.data.quantity,
             note: "Opening stock",
+            unitPrice: result.data.price,
+            unitCost: result.data.costPrice,
           },
         },
       },

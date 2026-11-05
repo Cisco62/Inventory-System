@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { adjustStock, type AdjustStockState } from "../lib/actions/stock";
+import { formatNaira } from "../lib/format";
 import { MOVEMENT_META, type AdjustableType } from "../lib/movements";
 import Modal from "./Modal";
 import { FormError } from "./ProductFields";
@@ -29,18 +30,32 @@ const iconTone: Record<AdjustableType, string> = {
   DAMAGED: "text-red-600",
 };
 
+type AdjustProduct = {
+  id: string;
+  name: string;
+  quantity: number;
+  price: number;
+  costPrice: number | null;
+};
+
 function AdjustStockModal({
   product,
   initialType,
   onClose,
 }: {
-  product: { id: string; name: string; quantity: number };
+  product: AdjustProduct;
   initialType: AdjustableType;
   onClose: () => void;
 }) {
   const router = useRouter();
   const [type, setType] = useState<AdjustableType>(initialType);
   const [amount, setAmount] = useState("");
+  // Per-unit money field: sale price for SOLD, cost for RECEIVED.
+  const [unitAmount, setUnitAmount] = useState<Record<AdjustableType, string>>({
+    SOLD: String(product.price),
+    RECEIVED: product.costPrice != null ? String(product.costPrice) : "",
+    DAMAGED: "",
+  });
   const [state, setState] = useState<AdjustStockState>({});
   const [pending, setPending] = useState(false);
 
@@ -55,6 +70,7 @@ function AdjustStockModal({
     const form = new FormData(e.currentTarget);
     form.set("productId", product.id);
     form.set("type", type);
+    if (type === "DAMAGED") form.delete("unitAmount");
     setPending(true);
     try {
       const result = await adjustStock(form);
@@ -74,6 +90,10 @@ function AdjustStockModal({
       setPending(false);
     }
   };
+
+  const unit = Number(unitAmount[type]);
+  const hasUnit = unitAmount[type].trim() !== "" && Number.isFinite(unit) && unit >= 0;
+  const total = valid && hasUnit ? n * unit : null;
 
   const amountError = state.fieldErrors?.amount ?? (tooMany ? `Only ${product.quantity} in stock.` : undefined);
 
@@ -135,6 +155,38 @@ function AdjustStockModal({
           {amountError && <p className="mt-1.5 text-sm text-red-600">{amountError}</p>}
         </div>
 
+        {type !== "DAMAGED" && (
+          <div>
+            <label htmlFor="adjust-unit" className="mb-1.5 block text-sm font-medium text-slate-700">
+              {type === "SOLD" ? "Sale price per unit (₦)" : "Cost per unit (₦)"}{" "}
+              {type === "RECEIVED" && <span className="font-normal text-slate-400">(optional)</span>}
+            </label>
+            <input
+              id="adjust-unit"
+              name="unitAmount"
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              required={type === "SOLD"}
+              value={unitAmount[type]}
+              onChange={(e) => setUnitAmount({ ...unitAmount, [type]: e.target.value })}
+              placeholder="0.00"
+              aria-invalid={state.fieldErrors?.unitAmount ? true : undefined}
+              className={inputClass(Boolean(state.fieldErrors?.unitAmount))}
+            />
+            {state.fieldErrors?.unitAmount ? (
+              <p className="mt-1.5 text-sm text-red-600">{state.fieldErrors.unitAmount}</p>
+            ) : (
+              <p className="mt-1.5 text-xs text-slate-500">
+                {type === "SOLD"
+                  ? "Change this if you sold at a different price."
+                  : "Also updates the product's cost price."}
+              </p>
+            )}
+          </div>
+        )}
+
         <div>
           <label htmlFor="adjust-note" className="mb-1.5 block text-sm font-medium text-slate-700">
             Note <span className="font-normal text-slate-400">(optional)</span>
@@ -167,6 +219,17 @@ function AdjustStockModal({
               {valid ? after : "—"}
             </p>
           </div>
+          {total != null && type !== "DAMAGED" && (
+            <>
+              <span className="h-8 w-px bg-slate-200" aria-hidden="true" />
+              <div className="text-center">
+                <p className="text-xs text-slate-500">{type === "SOLD" ? "Sale total" : "Total cost"}</p>
+                <p className="text-lg font-semibold tabular-nums text-slate-900">
+                  {formatNaira(total, { whole: total >= 1000 })}
+                </p>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
@@ -188,7 +251,7 @@ export default function AdjustStockButton({
   initialType = "SOLD",
   variant = "icon",
 }: {
-  product: { id: string; name: string; quantity: number };
+  product: AdjustProduct;
   initialType?: AdjustableType;
   variant?: "icon" | "button";
 }) {

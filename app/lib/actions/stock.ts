@@ -14,6 +14,15 @@ const AdjustSchema = z.object({
     .int("Use a whole number")
     .min(1, "Enter at least 1")
     .max(1_000_000, "That's too many"),
+  /** Sale price per unit (SOLD) or cost per unit (RECEIVED); optional. */
+  unitAmount: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() !== "" ? v : null),
+    z.coerce
+      .number({ message: "Enter a valid amount" })
+      .nonnegative("Cannot be negative")
+      .max(1_000_000_000, "That's too high")
+      .nullable()
+  ),
   note: z.preprocess(
     (v) => (typeof v === "string" && v.trim() !== "" ? v.trim() : null),
     z.string().max(200, "Keep the note under 200 characters").nullable()
@@ -22,7 +31,7 @@ const AdjustSchema = z.object({
 
 export type AdjustStockState = {
   error?: string;
-  fieldErrors?: Partial<Record<"type" | "amount" | "note", string>>;
+  fieldErrors?: Partial<Record<"type" | "amount" | "unitAmount" | "note", string>>;
   quantityAfter?: number;
 };
 
@@ -36,6 +45,7 @@ export async function adjustStock(formData: FormData): Promise<AdjustStockState>
     productId: formData.get("productId"),
     type: formData.get("type"),
     amount: formData.get("amount"),
+    unitAmount: formData.get("unitAmount"),
     note: formData.get("note"),
   });
   if (!parsed.success) {
@@ -47,7 +57,7 @@ export async function adjustStock(formData: FormData): Promise<AdjustStockState>
     return { error: "Please check the details below.", fieldErrors };
   }
 
-  const { productId, type, amount, note } = parsed.data;
+  const { productId, type, amount, unitAmount, note } = parsed.data;
   const change = type === "RECEIVED" ? amount : -amount;
 
   try {
@@ -59,7 +69,11 @@ export async function adjustStock(formData: FormData): Promise<AdjustStockState>
           userId: user.id,
           ...(change < 0 ? { quantity: { gte: amount } } : {}),
         },
-        data: { quantity: { increment: change } },
+        data: {
+          quantity: { increment: change },
+          // A delivery with a cost becomes the product's latest cost price.
+          ...(type === "RECEIVED" && unitAmount != null ? { costPrice: unitAmount } : {}),
+        },
       });
 
       if (count === 0) {
@@ -73,13 +87,24 @@ export async function adjustStock(formData: FormData): Promise<AdjustStockState>
         );
       }
 
-      const { quantity } = await tx.product.findUniqueOrThrow({
+      const product = await tx.product.findUniqueOrThrow({
         where: { id: productId },
-        select: { quantity: true },
+        select: { quantity: true, price: true, costPrice: true },
       });
+      const quantity = product.quantity;
 
+      // Snapshot prices so later price changes don't rewrite history.
       await tx.stockMovement.create({
-        data: { userId: user.id, productId, type, change, quantityAfter: quantity, note },
+        data: {
+          userId: user.id,
+          productId,
+          type,
+          change,
+          quantityAfter: quantity,
+          note,
+          unitPrice: type === "SOLD" && unitAmount != null ? unitAmount : product.price,
+          unitCost: type === "RECEIVED" && unitAmount != null ? unitAmount : product.costPrice,
+        },
       });
       return quantity;
     });

@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import {
   Activity,
-  AlertTriangle,
   ArrowRight,
   Banknote,
   Package,
-  PackageX,
   Plus,
+  ShoppingCart,
+  TrendingUp,
 } from "lucide-react";
 import PageShell from "../components/PageShell";
 import ActivityChart from "../components/ActivityChart";
@@ -31,15 +31,22 @@ import {
   stockStatusWhere,
 } from "../lib/inventory";
 import { prisma } from "../lib/prisma";
+import { summarizeSales } from "../lib/profit";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEKS_SHOWN = 12;
 
+const SALES_DAYS = 30;
+
 /** Start of the window shown in the activity chart. */
 function chartStart() {
   return new Date(Date.now() - WEEKS_SHOWN * 7 * DAY_MS);
+}
+
+function salesStart() {
+  return new Date(Date.now() - SALES_DAYS * DAY_MS);
 }
 
 /** Units received and sold in each of the last WEEKS_SHOWN seven-day windows. */
@@ -131,14 +138,16 @@ export default async function DashboardPage() {
 
   const since = chartStart();
 
-  const [totalProducts, lowStockCount, outOfStockCount, allProducts, lowest, recentActivity, chartMovements] =
+  const salesSince = salesStart();
+
+  const [totalProducts, lowStockCount, outOfStockCount, allProducts, lowest, recentActivity, chartMovements, recentSales] =
     await Promise.all([
       prisma.product.count({ where: { userId } }),
       prisma.product.count({ where: { userId, ...stockStatusWhere("low") } }),
       prisma.product.count({ where: { userId, ...stockStatusWhere("out") } }),
       prisma.product.findMany({
         where: { userId },
-        select: { price: true, quantity: true },
+        select: { price: true, costPrice: true, quantity: true },
       }),
       prisma.product.findMany({
         where: { userId },
@@ -155,6 +164,10 @@ export default async function DashboardPage() {
         where: { userId, type: { in: ["RECEIVED", "SOLD"] }, createdAt: { gt: since } },
         select: { type: true, change: true, createdAt: true },
       }),
+      prisma.stockMovement.findMany({
+        where: { userId, type: "SOLD", createdAt: { gt: salesSince } },
+        select: { change: true, unitPrice: true, unitCost: true },
+      }),
     ]);
 
   const inStockCount = totalProducts - lowStockCount - outOfStockCount;
@@ -169,37 +182,62 @@ export default async function DashboardPage() {
   const soldThisPeriod = activity.reduce((s, w) => s + w.sold, 0);
   const receivedThisPeriod = activity.reduce((s, w) => s + w.received, 0);
 
+  const sales = summarizeSales(recentSales);
+  const costedProducts = allProducts.filter((p) => p.costPrice != null);
+  const valueAtCost = costedProducts.reduce(
+    (sum, p) => sum + p.costPrice!.toNumber() * p.quantity,
+    0
+  );
+  const salesMargin =
+    sales.revenueWithCost > 0 ? Math.round((sales.profit / sales.revenueWithCost) * 100) : null;
+
+  const stockSummary = [
+    lowStockCount > 0 && `${formatNumber(lowStockCount)} low`,
+    outOfStockCount > 0 && `${formatNumber(outOfStockCount)} out of stock`,
+  ].filter(Boolean);
+
   const stats = [
     {
       label: "Total products",
       value: formatNumber(totalProducts),
-      sub: `${formatNumber(totalUnits)} units in stock`,
+      sub:
+        stockSummary.length > 0
+          ? stockSummary.join(" · ")
+          : `${formatNumber(totalUnits)} units, all in stock`,
       icon: Package,
       tone: "indigo" as const,
-      href: "/inventory",
+      href: lowStockCount > 0 ? "/inventory?status=low" : outOfStockCount > 0 ? "/inventory?status=out" : "/inventory",
     },
     {
       label: "Inventory value",
       value: formatNaira(totalValue, { whole: true }),
-      sub: "Price × quantity on hand",
+      sub:
+        costedProducts.length > 0
+          ? `${formatNaira(valueAtCost, { whole: true })} at cost${
+              costedProducts.length < totalProducts ? " (some missing)" : ""
+            }`
+          : "At selling price",
       icon: Banknote,
+      tone: "slate" as const,
+    },
+    {
+      label: `Sales · last ${SALES_DAYS} days`,
+      value: formatNaira(sales.revenue, { whole: true }),
+      sub: `${formatNumber(sales.units)} units sold`,
+      icon: ShoppingCart,
       tone: "green" as const,
     },
     {
-      label: "Low stock",
-      value: formatNumber(lowStockCount),
-      sub: lowStockCount > 0 ? "Need restocking soon" : "Nothing running low",
-      icon: AlertTriangle,
-      tone: "amber" as const,
-      href: "/inventory?status=low",
-    },
-    {
-      label: "Out of stock",
-      value: formatNumber(outOfStockCount),
-      sub: outOfStockCount > 0 ? "Currently unavailable" : "Everything available",
-      icon: PackageX,
-      tone: "red" as const,
-      href: "/inventory?status=out",
+      label: `Profit · last ${SALES_DAYS} days`,
+      value: sales.revenueWithCost > 0 ? formatNaira(sales.profit, { whole: true }) : "—",
+      sub:
+        salesMargin != null
+          ? `${salesMargin}% margin${sales.unitsWithoutCost > 0 ? " · some sales have no cost" : ""}`
+          : sales.units > 0
+            ? "Add cost prices to see profit"
+            : "No sales recorded yet",
+      icon: TrendingUp,
+      tone: (sales.profit < 0 ? "red" : "green") as "red" | "green",
     },
   ];
 
@@ -358,7 +396,13 @@ export default async function DashboardPage() {
                   <StockBadge status={getStockStatus(product.quantity, product.lowStockAt)} />
                   <AdjustStockButton
                     initialType="RECEIVED"
-                    product={{ id: product.id, name: product.name, quantity: product.quantity }}
+                    product={{
+                      id: product.id,
+                      name: product.name,
+                      quantity: product.quantity,
+                      price: product.price.toNumber(),
+                      costPrice: product.costPrice?.toNumber() ?? null,
+                    }}
                   />
                 </li>
               ))}

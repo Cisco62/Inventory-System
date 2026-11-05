@@ -10,6 +10,7 @@ interface Product {
   id: string;
   name: string;
   price: number;
+  costPrice: number | null;
   quantity: number;
   sku: string | null;
   lowStockAt: number | null;
@@ -52,6 +53,7 @@ export default function UpdateProductModal({
           defaults={{
             name: product.name,
             price: String(product.price),
+            costPrice: product.costPrice?.toString() ?? "",
             quantity: String(product.quantity),
             sku: product.sku ?? "",
             lowStockAt: product.lowStockAt?.toString() ?? "",

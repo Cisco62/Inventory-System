@@ -17,6 +17,7 @@ import {
   getStockStatus,
 } from "../../lib/inventory";
 import { prisma } from "../../lib/prisma";
+import { marginPercent, summarizeSales } from "../../lib/profit";
 
 const HISTORY_LIMIT = 100;
 
@@ -37,7 +38,7 @@ export default async function ProductPage({ params }: Props) {
   const product = await getProduct(id);
   if (!product) notFound();
 
-  const [movements, totals] = await Promise.all([
+  const [movements, totals, sales] = await Promise.all([
     prisma.stockMovement.findMany({
       where: { productId: product.id },
       orderBy: { createdAt: "desc" },
@@ -48,18 +49,43 @@ export default async function ProductPage({ params }: Props) {
       where: { productId: product.id },
       _sum: { change: true },
     }),
+    prisma.stockMovement.findMany({
+      where: { productId: product.id, type: "SOLD" },
+      select: { change: true, unitPrice: true, unitCost: true },
+    }),
   ]);
 
   const sum = (type: string) =>
     Math.abs(totals.find((t) => t.type === type)?._sum.change ?? 0);
   const price = product.price.toNumber();
+  const cost = product.costPrice?.toNumber() ?? null;
+  const margin = marginPercent(price, cost);
+  const salesSummary = summarizeSales(sales);
   const status = getStockStatus(product.quantity, product.lowStockAt);
 
   const stats = [
     { label: "In stock", value: formatNumber(product.quantity), extra: <StockBadge status={status} /> },
-    { label: "Price", value: formatNaira(price) },
-    { label: "Stock value", value: formatNaira(price * product.quantity, { whole: true }) },
-    { label: "Low stock alert", value: `≤ ${product.lowStockAt ?? DEFAULT_LOW_STOCK_AT}` },
+    {
+      label: "Selling price",
+      value: formatNaira(price),
+      sub: cost != null ? `Cost ${formatNaira(cost)}` : "No cost price set",
+    },
+    {
+      label: "Margin",
+      value: margin != null ? `${margin}%` : "—",
+      sub:
+        cost != null
+          ? `${formatNaira(price - cost)} profit per unit`
+          : "Add a cost price to see margin",
+    },
+    {
+      label: "Stock value",
+      value: formatNaira(price * product.quantity, { whole: true }),
+      sub:
+        cost != null
+          ? `${formatNaira(cost * product.quantity, { whole: true })} at cost`
+          : `Alert at ≤ ${product.lowStockAt ?? DEFAULT_LOW_STOCK_AT}`,
+    },
   ];
 
   const lifetime = [
@@ -87,6 +113,7 @@ export default async function ProductPage({ params }: Props) {
                 id: product.id,
                 name: product.name,
                 price,
+                costPrice: product.costPrice?.toNumber() ?? null,
                 quantity: product.quantity,
                 sku: product.sku,
                 lowStockAt: product.lowStockAt,
@@ -100,7 +127,13 @@ export default async function ProductPage({ params }: Props) {
           </div>
           <AdjustStockButton
             variant="button"
-            product={{ id: product.id, name: product.name, quantity: product.quantity }}
+            product={{
+                      id: product.id,
+                      name: product.name,
+                      quantity: product.quantity,
+                      price: product.price.toNumber(),
+                      costPrice: product.costPrice?.toNumber() ?? null,
+                    }}
           />
         </>
       }
@@ -113,8 +146,9 @@ export default async function ProductPage({ params }: Props) {
               <p className="text-2xl font-semibold tracking-tight tabular-nums text-slate-900">
                 {s.value}
               </p>
-              {s.extra}
+              {"extra" in s ? s.extra : null}
             </div>
+            {"sub" in s && <p className="mt-1 text-xs text-slate-500">{s.sub}</p>}
           </Card>
         ))}
       </div>
@@ -152,15 +186,31 @@ export default async function ProductPage({ params }: Props) {
               </div>
             ))}
             <div className="flex items-center justify-between border-t border-slate-100 pt-3 text-sm">
-              <dt className="text-slate-600">Sales value</dt>
+              <dt className="text-slate-600">Revenue</dt>
               <dd className="font-semibold tabular-nums text-slate-900">
-                {formatNaira(sum("SOLD") * price, { whole: true })}
+                {formatNaira(salesSummary.revenue, { whole: true })}
+              </dd>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <dt className="text-slate-600">Profit</dt>
+              <dd
+                className={`font-semibold tabular-nums ${
+                  salesSummary.profit < 0 ? "text-red-600" : "text-emerald-600"
+                }`}
+              >
+                {salesSummary.revenueWithCost > 0 || salesSummary.units === 0
+                  ? formatNaira(salesSummary.profit, { whole: true })
+                  : "—"}
               </dd>
             </div>
           </dl>
-          <p className="mt-3 text-xs text-slate-400">
-            Sales value uses the current price.
-          </p>
+          {salesSummary.unitsWithoutCost > 0 && (
+            <p className="mt-3 text-xs text-slate-400">
+              {formatNumber(salesSummary.unitsWithoutCost)} unit
+              {salesSummary.unitsWithoutCost === 1 ? "" : "s"} sold without a cost price
+              {" "}aren&rsquo;t included in profit.
+            </p>
+          )}
         </Card>
       </div>
     </PageShell>
