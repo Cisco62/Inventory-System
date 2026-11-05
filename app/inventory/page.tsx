@@ -3,6 +3,8 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { Download, Package, Plus, Search, SearchX } from "lucide-react";
 import Pagination from "../components/pagination";
+import PageSizeSelect from "../components/PageSizeSelect";
+import { PAGE_SIZES, parsePageSize } from "../lib/pagination";
 import PageShell from "../components/PageShell";
 import StockBadge from "../components/StockBadge";
 import DeleteProductButton from "../components/DeleteProductButton";
@@ -24,12 +26,11 @@ import {
 
 export const metadata: Metadata = { title: "Inventory" };
 
-const PAGE_SIZE = 10;
-
-function inventoryUrl(params: { q?: string; status?: StockStatus }) {
+function inventoryUrl(params: { q?: string; status?: StockStatus; pageSize?: number }) {
   const search = new URLSearchParams();
   if (params.q) search.set("q", params.q);
   if (params.status) search.set("status", params.status);
+  if (params.pageSize && params.pageSize !== PAGE_SIZES[0]) search.set("pageSize", String(params.pageSize));
   const qs = search.toString();
   return qs ? `/inventory?${qs}` : "/inventory";
 }
@@ -37,7 +38,7 @@ function inventoryUrl(params: { q?: string; status?: StockStatus }) {
 export default async function InventoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string; status?: string }>;
+  searchParams: Promise<{ q?: string; page?: string; status?: string; pageSize?: string }>;
 }) {
   const user = await getCurrentUser();
   const userId = user.id;
@@ -45,6 +46,7 @@ export default async function InventoryPage({
 
   const q = (params.q ?? "").trim();
   const status = parseStockStatus(params.status);
+  const pageSize = parsePageSize(params.pageSize);
   const requestedPage = Math.max(1, Math.floor(Number(params.page) || 1));
   const where = inventoryWhere(userId, q, status);
   const searchOnly = inventoryWhere(userId, q, undefined);
@@ -59,19 +61,19 @@ export default async function InventoryPage({
   ]);
   const hasAnyProducts = ownedCount > 0;
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const page = Math.min(requestedPage, totalPages);
 
   const items = await prisma.product.findMany({
     where,
     orderBy: { createdAt: "desc" },
-    skip: (page - 1) * PAGE_SIZE,
-    take: PAGE_SIZE,
+    skip: (page - 1) * pageSize,
+    take: pageSize,
   });
 
   const isFiltered = Boolean(q || status);
-  const firstItem = totalCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const lastItem = Math.min(page * PAGE_SIZE, totalCount);
+  const firstItem = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
+  const lastItem = Math.min(page * pageSize, totalCount);
 
   const tabs: { label: string; status?: StockStatus; count: number }[] = [
     { label: "All", count: allCount },
@@ -130,7 +132,7 @@ export default async function InventoryPage({
               return (
                 <Link
                   key={tab.label}
-                  href={inventoryUrl({ q, status: tab.status })}
+                  href={inventoryUrl({ q, status: tab.status, pageSize })}
                   aria-current={active ? "page" : undefined}
                   className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
                     active
@@ -153,6 +155,9 @@ export default async function InventoryPage({
 
           <form className="flex gap-2 lg:w-96" action="/inventory" method="GET" role="search">
             {status && <input type="hidden" name="status" value={status} />}
+            {pageSize !== PAGE_SIZES[0] && (
+              <input type="hidden" name="pageSize" value={pageSize} />
+            )}
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
@@ -166,7 +171,7 @@ export default async function InventoryPage({
             </div>
             <button className={buttonClass("secondary")}>Search</button>
             {q && (
-              <Link href={inventoryUrl({ status })} className={buttonClass("ghost")}>
+              <Link href={inventoryUrl({ status, pageSize })} className={buttonClass("ghost")}>
                 Clear
               </Link>
             )}
@@ -281,18 +286,39 @@ export default async function InventoryPage({
             </div>
 
             {/* Footer */}
-            <div className="flex flex-col items-center justify-between gap-4 border-t border-slate-200 px-4 py-3 sm:flex-row sm:px-6">
-              <p className="text-sm text-slate-500">
-                Showing <span className="font-medium text-slate-900">{firstItem}</span>–
-                <span className="font-medium text-slate-900">{lastItem}</span> of{" "}
-                <span className="font-medium text-slate-900">{formatNumber(totalCount)}</span>
-              </p>
-              <Pagination
-                currentPage={page}
-                totalPages={totalPages}
-                baseUrl="/inventory"
-                searchParams={{ q, status: status ?? "" }}
-              />
+            <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+              <div className="flex items-center justify-between gap-4 sm:justify-start sm:gap-6">
+                <p className="text-sm text-slate-500">
+                  Showing{" "}
+                  <span className="font-medium tabular-nums text-slate-900">
+                    {firstItem}–{lastItem}
+                  </span>{" "}
+                  of{" "}
+                  <span className="font-medium tabular-nums text-slate-900">
+                    {formatNumber(totalCount)}
+                  </span>{" "}
+                  {totalCount === 1 ? "product" : "products"}
+                </p>
+                <Suspense fallback={null}>
+                  <PageSizeSelect value={pageSize} />
+                </Suspense>
+              </div>
+              <div className="flex items-center justify-end gap-3">
+                <p className="hidden whitespace-nowrap text-sm text-slate-500 sm:block">
+                  Page <span className="font-medium tabular-nums text-slate-900">{page}</span> of{" "}
+                  <span className="font-medium tabular-nums text-slate-900">{totalPages}</span>
+                </p>
+                <Pagination
+                  currentPage={page}
+                  totalPages={totalPages}
+                  baseUrl="/inventory"
+                  searchParams={{
+                    q,
+                    status: status ?? "",
+                    pageSize: pageSize !== PAGE_SIZES[0] ? String(pageSize) : "",
+                  }}
+                />
+              </div>
             </div>
           </>
         )}

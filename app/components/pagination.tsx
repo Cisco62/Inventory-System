@@ -8,10 +8,12 @@ interface PaginationProps {
   searchParams: Record<string, string>;
 }
 
-const cell =
-  "inline-flex h-9 min-w-9 items-center justify-center gap-1 rounded-lg px-2.5 text-sm font-medium tabular-nums";
+// Display is set per use: arrows are always "inline-flex", page numbers
+// "hidden sm:inline-flex" (mobile shows "Page X of Y" instead).
+const segment =
+  "relative h-9 min-w-9 items-center justify-center px-3 text-sm font-medium tabular-nums ring-1 ring-inset ring-slate-300 -ml-px first:ml-0 first:rounded-l-lg last:rounded-r-lg focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500";
 
-function PageArrow({
+function Arrow({
   href,
   disabled,
   label,
@@ -24,28 +26,37 @@ function PageArrow({
 }) {
   if (disabled) {
     return (
-      <span aria-disabled="true" aria-label={label} className={`${cell} cursor-not-allowed text-slate-300`}>
+      <span
+        aria-disabled="true"
+        aria-label={label}
+        className={`${segment} inline-flex cursor-not-allowed bg-slate-50 text-slate-300`}
+      >
         {children}
       </span>
     );
   }
   return (
-    <Link href={href} aria-label={label} className={`${cell} text-slate-600 hover:bg-slate-100 hover:text-slate-900`}>
+    <Link
+      href={href}
+      aria-label={label}
+      className={`${segment} inline-flex bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900`}
+    >
       {children}
     </Link>
   );
 }
 
 function getVisiblePages(currentPage: number, totalPages: number) {
-  const delta = 1;
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, i) => i + 1);
+  }
   const pages: (number | "...")[] = [1];
-  const start = Math.max(2, currentPage - delta);
-  const end = Math.min(totalPages - 1, currentPage + delta);
-
+  const start = Math.max(2, currentPage - 1);
+  const end = Math.min(totalPages - 1, currentPage + 1);
   if (start > 2) pages.push("...");
   for (let i = start; i <= end; i++) pages.push(i);
   if (end < totalPages - 1) pages.push("...");
-  if (totalPages > 1) pages.push(totalPages);
+  pages.push(totalPages);
   return pages;
 }
 
@@ -55,48 +66,69 @@ export default function Pagination({
   baseUrl,
   searchParams,
 }: PaginationProps) {
-  if (totalPages <= 1) return null;
+  const pageCount = Math.max(1, totalPages);
 
   const getPageUrl = (page: number) => {
     const params = new URLSearchParams(
       Object.entries(searchParams).filter(([, value]) => value)
     );
-    params.set("page", String(page));
-    return `${baseUrl}?${params.toString()}`;
+    if (page > 1) params.set("page", String(page));
+    const qs = params.toString();
+    return qs ? `${baseUrl}?${qs}` : baseUrl;
   };
 
   return (
-    <nav aria-label="Pagination" className="flex items-center gap-1">
-      <PageArrow href={getPageUrl(currentPage - 1)} disabled={currentPage <= 1} label="Previous page">
-        <ChevronLeft className="h-4 w-4" />
-        <span className="hidden sm:inline">Previous</span>
-      </PageArrow>
+    <div className="flex items-center gap-3">
+      <p className="whitespace-nowrap text-sm text-slate-500 sm:hidden">
+        Page <span className="font-medium text-slate-900">{currentPage}</span> of{" "}
+        <span className="font-medium text-slate-900">{pageCount}</span>
+      </p>
 
-      {getVisiblePages(currentPage, totalPages).map((page, idx) =>
-        page === "..." ? (
-          <span key={`dots-${idx}`} className={`${cell} text-slate-400`}>
-            …
-          </span>
-        ) : (
-          <Link
-            key={page}
-            href={getPageUrl(page)}
-            aria-current={page === currentPage ? "page" : undefined}
-            className={`${cell} ${
-              page === currentPage
-                ? "bg-indigo-600 text-white shadow-sm"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-            }`}
-          >
-            {page}
-          </Link>
-        )
-      )}
+      <nav aria-label="Pagination" className="isolate inline-flex shadow-sm rounded-lg">
+        <Arrow
+          href={getPageUrl(currentPage - 1)}
+          disabled={currentPage <= 1}
+          label="Previous page"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Arrow>
 
-      <PageArrow href={getPageUrl(currentPage + 1)} disabled={currentPage >= totalPages} label="Next page">
-        <span className="hidden sm:inline">Next</span>
-        <ChevronRight className="h-4 w-4" />
-      </PageArrow>
-    </nav>
+        {/* Page numbers (hidden on small screens, where "Page X of Y" is shown) */}
+        {getVisiblePages(currentPage, pageCount).map((page, idx) =>
+          page === "..." ? (
+            <span
+              key={`dots-${idx}`}
+              className={`${segment} hidden bg-white text-slate-400 sm:inline-flex`}
+            >
+              …
+            </span>
+          ) : page === currentPage ? (
+            <span
+              key={page}
+              aria-current="page"
+              className={`${segment} z-10 hidden bg-indigo-600 text-white ring-indigo-600 sm:inline-flex`}
+            >
+              {page}
+            </span>
+          ) : (
+            <Link
+              key={page}
+              href={getPageUrl(page)}
+              className={`${segment} hidden bg-white text-slate-700 hover:bg-slate-50 sm:inline-flex`}
+            >
+              {page}
+            </Link>
+          )
+        )}
+
+        <Arrow
+          href={getPageUrl(currentPage + 1)}
+          disabled={currentPage >= pageCount}
+          label="Next page"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Arrow>
+      </nav>
+    </div>
   );
 }
