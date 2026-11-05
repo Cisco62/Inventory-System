@@ -1,285 +1,373 @@
-import { get } from "http";
-import Sidebar from "../components/Sidebar";
-import { prisma } from "../lib/prisma";
-import { getCurrentUser } from "../lib/auth";
-import { Package, TrendingUp } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
+import { ArrowRight, Package } from "lucide-react";
+import PageShell from "../components/PageShell";
 import ProductsChart from "../components/Products-Chart";
+import StockBadge from "../components/StockBadge";
+import { getCurrentUser } from "../lib/auth";
+import {
+  formatNaira,
+  formatNumber,
+  getStockStatus,
+  stockStatusWhere,
+} from "../lib/inventory";
+import { prisma } from "../lib/prisma";
+
+export const metadata: Metadata = { title: "Dashboard" };
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const WEEKS_SHOWN = 12;
+
+/** Count dates into the last WEEKS_SHOWN seven-day windows ending now. */
+function countByWeek(dates: Date[], now = Date.now()) {
+  return Array.from({ length: WEEKS_SHOWN }, (_, idx) => {
+    const weeksAgo = WEEKS_SHOWN - 1 - idx;
+    const end = now - weeksAgo * 7 * DAY_MS;
+    const start = end - 7 * DAY_MS;
+    const startDate = new Date(start + DAY_MS);
+    return {
+      week: `${String(startDate.getMonth() + 1).padStart(2, "0")}/${String(
+        startDate.getDate()
+      ).padStart(2, "0")}`,
+      products: dates.filter((d) => {
+        const t = d.getTime();
+        return t > start && t <= end;
+      }).length,
+    };
+  });
+}
+
+function EmptyProducts({ message }: { message: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 text-center">
+      <Package className="mb-3 h-10 w-10 text-gray-300" />
+      <p className="text-sm font-medium text-gray-900">{message}</p>
+      <p className="mt-1 text-sm text-gray-500">
+        Add your first product to start tracking stock.
+      </p>
+      <Link
+        href="/add-product"
+        className="mt-4 inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+      >
+        Add Product
+      </Link>
+    </div>
+  );
+}
+
+function CardHeader({
+  title,
+  subtitle,
+  href,
+}: {
+  title: string;
+  subtitle?: string;
+  href?: string;
+}) {
+  return (
+    <div className="mb-6 flex items-start justify-between gap-4">
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+        {subtitle && <p className="text-sm text-gray-500">{subtitle}</p>}
+      </div>
+      {href && (
+        <Link
+          href={href}
+          className="inline-flex items-center gap-1 whitespace-nowrap text-sm font-medium text-blue-600 hover:text-blue-800"
+        >
+          View all <ArrowRight className="h-4 w-4" />
+        </Link>
+      )}
+    </div>
+  );
+}
+
+function StockRing({ percentage }: { percentage: number }) {
+  const radius = 42;
+  const circumference = 2 * Math.PI * radius;
+  const filled = (percentage / 100) * circumference;
+
+  return (
+    <div className="relative h-48 w-48">
+      <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
+        <circle
+          cx="50"
+          cy="50"
+          r={radius}
+          fill="none"
+          strokeWidth="9"
+          className="stroke-gray-200"
+        />
+        {percentage > 0 && (
+          <circle
+            cx="50"
+            cy="50"
+            r={radius}
+            fill="none"
+            strokeWidth="9"
+            strokeLinecap="round"
+            strokeDasharray={`${filled} ${circumference}`}
+            className="stroke-green-500"
+          />
+        )}
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-2xl font-bold text-gray-900">{percentage}%</div>
+          <div className="text-sm text-gray-600">In Stock</div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
   const userId = user.id;
 
-  const [totalProducts, lowStock, allProducts] = await Promise.all([
-    prisma.product.count({ where: { userId } }),
-    prisma.product.count({
-      where: {
-        userId,
-        lowStockAt: { not: null },
-        quantity: { lte: 5 },
-      },
-    }),
-    prisma.product.findMany({
-      where: { userId },
-      select: { price: true, quantity: true, createdAt: true },
-    }),
-  ]);
+  const [totalProducts, lowStockCount, outOfStockCount, allProducts, lowest, recent] =
+    await Promise.all([
+      prisma.product.count({ where: { userId } }),
+      prisma.product.count({ where: { userId, ...stockStatusWhere("low") } }),
+      prisma.product.count({ where: { userId, ...stockStatusWhere("out") } }),
+      prisma.product.findMany({
+        where: { userId },
+        select: { price: true, quantity: true, createdAt: true },
+      }),
+      prisma.product.findMany({
+        where: { userId },
+        orderBy: [{ quantity: "asc" }, { name: "asc" }],
+        take: 5,
+      }),
+      prisma.product.findMany({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      }),
+    ]);
+
+  const inStockCount = totalProducts - lowStockCount - outOfStockCount;
+  const totalUnits = allProducts.reduce((sum, p) => sum + p.quantity, 0);
   const totalValue = allProducts.reduce(
-    (sum, product) => sum + product.price.toNumber() * product.quantity,
+    (sum, p) => sum + p.price.toNumber() * p.quantity,
     0
   );
 
-  const inStockCount = allProducts.filter(
-    (product) => Number(product.quantity) > 5
-  ).length;
-  const lowStockCount = allProducts.filter(
-    (product) => Number(product.quantity) <= 5 && Number(product.quantity) >= 1
-  ).length;
-  const outOfStockCount = allProducts.filter(
-    (product) => Number(product.quantity) === 0
-  ).length;
+  const percent = (count: number) =>
+    totalProducts > 0 ? Math.round((count / totalProducts) * 100) : 0;
+  const inStockPercentage = percent(inStockCount);
 
-  const inStockPercentage =
-    totalProducts > 0 ? Math.round((inStockCount / totalProducts) * 100) : 0;
-  const lowStockPercentage =
-    totalProducts > 0 ? Math.round((lowStockCount / totalProducts) * 100) : 0;
-  const outOfStockPercentage =
-    totalProducts > 0 ? Math.round((outOfStockCount / totalProducts) * 100) : 0;
+  const weeklyProductsData = countByWeek(allProducts.map((p) => p.createdAt));
 
-  const now = new Date();
-  const weeklyProductsData = [];
+  const metrics = [
+    {
+      label: "Total Products",
+      value: formatNumber(totalProducts),
+      sub: `${formatNumber(totalUnits)} units`,
+      href: "/inventory",
+      tone: "text-gray-900",
+    },
+    {
+      label: "Total Value",
+      value: formatNaira(totalValue, { whole: true }),
+      sub: "Price × quantity",
+      tone: "text-gray-900",
+    },
+    {
+      label: "Low Stock",
+      value: formatNumber(lowStockCount),
+      sub: lowStockCount > 0 ? "Needs restocking" : "All good",
+      href: "/inventory?status=low",
+      tone: lowStockCount > 0 ? "text-yellow-600" : "text-gray-900",
+    },
+    {
+      label: "Out of Stock",
+      value: formatNumber(outOfStockCount),
+      sub: outOfStockCount > 0 ? "Unavailable" : "All good",
+      href: "/inventory?status=out",
+      tone: outOfStockCount > 0 ? "text-red-600" : "text-gray-900",
+    },
+  ];
 
-  for (let i = 11; i >= 0; i--) {
-    const weekStart = new Date(now);
-    weekStart.setDate(weekStart.getDate() - i * 7);
-    weekStart.setHours(0, 0, 0, 0);
-
-    const weekEnd = new Date(now);
-    weekEnd.setDate(weekEnd.getDate() + 6);
-    weekStart.setHours(23, 59, 59, 999);
-
-    const weekLabel = `${String(weekStart.getMonth() + 1).padStart(
-      2,
-      "0"
-    )}/${String(weekStart.getDate() + 1).padStart(2, "0")}`;
-
-    const weekProducts = allProducts.filter((product) => {
-      const productDate = new Date(product.createdAt);
-      return productDate >= weekStart && productDate <= weekEnd;
-    });
-
-    weeklyProductsData.push({
-      week: weekLabel,
-      products: weekProducts.length,
-    });
-  }
-
-  const recent = await prisma.product.findMany({
-    where: { userId },
-    orderBy: { createdAt: "desc" },
-    take: 5,
-  });
+  const legend = [
+    { label: "In Stock", count: inStockCount, dot: "bg-green-500", href: "/inventory?status=in" },
+    { label: "Low Stock", count: lowStockCount, dot: "bg-yellow-500", href: "/inventory?status=low" },
+    { label: "Out of Stock", count: outOfStockCount, dot: "bg-red-500", href: "/inventory?status=out" },
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Sidebar currentPath="/dashboard" />
-      <main className="ml-64 p-8">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold text-gray-900">
-                Dashboard
-              </h1>
-              <p className="text-sm text-gray-500">
-                Welcome back! Here is an overview of your inventory.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          {/* Key Metrics */}
-          <div className="bg-white p-6 rounded-lg border border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900 mb-6">
-              Key Metrics
-            </h2>
-
-            <div className="grid grid-cols-3 gap-6">
-              <div className="text-center">
-                <div className="text-3xl font-bold text-gray-900">
-                  {totalProducts}
-                </div>
-                <div className="text-sm text-gray-600">Total Products</div>
-                <div className="flex items-center justify-center mt-1">
-                  <span className="text-xs text-green-600">
-                    +{totalProducts}
-                  </span>
-                  <TrendingUp className="w-3 h-3 text-green-600 ml-1" />
-                </div>
-              </div>
-
-              <div className="text-center">
-                <div className="text-3xl font-bold text-gray-900">
-                  ₦{Number(totalValue).toFixed(0)}
-                </div>
-                <div className="text-sm text-gray-600">Total Value</div>
-                <div className="flex items-center justify-center mt-1">
-                  <span className="text-xs text-green-600">
-                    +₦{Number(totalValue).toFixed(0)}
-                  </span>
-                  <TrendingUp className="w-3 h-3 text-green-600 ml-1" />
-                </div>
-              </div>
-
-              <div className="text-center">
-                <div className="text-3xl font-bold text-gray-900">
-                  {lowStock}
-                </div>
-                <div className="text-sm text-gray-600">Low Stock</div>
-                <div className="flex items-center justify-center mt-1">
-                  <span className="text-xs text-green-600">+{lowStock}</span>
-                  <TrendingUp className="w-3 h-3 text-green-600 ml-1" />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Inventory over time */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2>New products per week</h2>
-            </div>
-            <div className="h-48">
-              <ProductsChart data={weeklyProductsData} />
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          {/* Stock Level */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Stock Levels
-              </h2>
-            </div>
-
-            {recent.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <Package className="w-10 h-10 text-gray-300 mb-3" />
-                <p className="text-sm font-medium text-gray-900">
-                  No stock levels to show yet
-                </p>
-                <p className="text-sm text-gray-500 mt-1">
-                  Add your first product to start tracking stock.
-                </p>
+    <PageShell
+      title="Dashboard"
+      description="Welcome back! Here is an overview of your inventory."
+    >
+      <div className="mb-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
+        {/* Key Metrics */}
+        <div className="rounded-lg border border-gray-200 bg-white p-6">
+          <CardHeader title="Key Metrics" />
+          <div className="grid grid-cols-2 gap-4">
+            {metrics.map((m) => {
+              const body = (
+                <>
+                  <div className={`text-2xl font-bold sm:text-3xl ${m.tone}`}>
+                    {m.value}
+                  </div>
+                  <div className="text-sm font-medium text-gray-700">
+                    {m.label}
+                  </div>
+                  <div className="mt-1 text-xs text-gray-500">{m.sub}</div>
+                </>
+              );
+              return m.href ? (
                 <Link
-                  href="/add-product"
-                  className="mt-4 inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+                  key={m.label}
+                  href={m.href}
+                  className="rounded-lg border border-gray-100 p-4 transition-colors hover:border-blue-200 hover:bg-blue-50/50"
                 >
-                  Add Product
+                  {body}
                 </Link>
-              </div>
-            ) : (
-            <div className="space-y-3">
-              {recent.map((product, key) => {
-                const stockLevel =
-                  product.quantity === 0
-                    ? 0
-                    : product.quantity <= (product.lowStockAt || 5)
-                    ? 1
-                    : 2;
+              ) : (
+                <div
+                  key={m.label}
+                  className="rounded-lg border border-gray-100 p-4"
+                >
+                  {body}
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
-                const bgColors = [
-                  "bg-red-600",
-                  "bg-yellow-600",
-                  "bg-green-600",
-                ];
-                const textColors = [
-                  "text-red-600",
-                  "text-yellow-600",
-                  "text-green-600",
-                ];
+        {/* New products per week */}
+        <div className="rounded-lg border border-gray-200 bg-white p-6">
+          <CardHeader
+            title="New Products per Week"
+            subtitle={`Last ${WEEKS_SHOWN} weeks`}
+          />
+          <div className="h-56">
+            <ProductsChart data={weeklyProductsData} />
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
+        {/* Stock Levels */}
+        <div className="rounded-lg border border-gray-200 bg-white p-6">
+          <CardHeader
+            title="Stock Levels"
+            subtitle="Lowest stock first"
+            href={totalProducts > 0 ? "/inventory" : undefined}
+          />
+          {lowest.length === 0 ? (
+            <EmptyProducts message="No stock levels to show yet" />
+          ) : (
+            <div className="space-y-3">
+              {lowest.map((product) => {
+                const status = getStockStatus(
+                  product.quantity,
+                  product.lowStockAt
+                );
                 return (
                   <div
-                    key={key}
-                    className="flex items-center justify-between p-3 rounded-lg bg-gray-50"
+                    key={product.id}
+                    className="flex items-center justify-between gap-3 rounded-lg bg-gray-50 p-3"
                   >
-                    <div className="flex items-center space-x-3">
-                      <div
-                        className={`w-3 h-3 rounded-full ${bgColors[stockLevel]}`}
-                      />
-                      <span className="text-sm font-medium text-gray-900">
-                        {product.name}
+                    <span className="truncate text-sm font-medium text-gray-900">
+                      {product.name}
+                    </span>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span className="text-sm text-gray-600">
+                        {formatNumber(product.quantity)} units
                       </span>
-                    </div>
-                    <div
-                      className={`text-sm font-medium ${textColors[stockLevel]}`}
-                    >
-                      {product.quantity} units
+                      <StockBadge status={status} />
                     </div>
                   </div>
                 );
               })}
             </div>
-            )}
-          </div>
+          )}
+        </div>
 
-          {/* Efficiency */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Efficiency
-              </h2>
-            </div>
-
-            <div className="flex items-center justify-center">
-              <div className="relative w-48 h-48">
-                <div className="absolute inset-0 rounded-full border-8 border-gray-200"></div>
-                <div
-                  className="absolute inset-0 rounded-full border-8 border-blue-600"
-                  style={{
-                    clipPath:
-                      "polygon(50% 50%, 50% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 50%)",
-                  }}
-                />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-gray-900">
-                      {inStockPercentage}%
-                    </div>
-                    <div className="text-sm text-gray-600">In Stock</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6 space-y-2">
-              <div className="flex items-center justify-between text-sm text-gray-600">
-                <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 rounded-full bg-blue-200" />
-                  <span>In Stock ({inStockPercentage}%)</span>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between text-sm text-gray-600">
-                <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 rounded-full bg-blue-600" />
-                  <span>Low Stock ({lowStockPercentage}%)</span>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between text-sm text-gray-600">
-                <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 rounded-full bg-blue-200" />
-                  <span>Out of Stock ({outOfStockPercentage}%)</span>
-                </div>
-              </div>
+        {/* Stock Health */}
+        <div className="rounded-lg border border-gray-200 bg-white p-6">
+          <CardHeader title="Stock Health" subtitle="Share of products by status" />
+          <div className="flex flex-col items-center gap-8 sm:flex-row sm:justify-center">
+            <StockRing percentage={inStockPercentage} />
+            <div className="w-full space-y-2 sm:w-auto">
+              {legend.map((item) => (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  className="flex items-center justify-between gap-6 rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className={`h-3 w-3 rounded-full ${item.dot}`} />
+                    {item.label}
+                  </span>
+                  <span className="font-medium text-gray-900">
+                    {formatNumber(item.count)} ({percent(item.count)}%)
+                  </span>
+                </Link>
+              ))}
             </div>
           </div>
         </div>
-      </main>
-    </div>
+      </div>
+
+      {/* Recent Products */}
+      <div className="rounded-lg border border-gray-200 bg-white p-6">
+        <CardHeader
+          title="Recent Products"
+          subtitle="Latest additions to your inventory"
+          href={totalProducts > 0 ? "/inventory" : undefined}
+        />
+        {recent.length === 0 ? (
+          <EmptyProducts message="No products added yet" />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 text-left text-xs uppercase text-gray-500">
+                  <th className="pb-3 pr-4 font-medium">Name</th>
+                  <th className="pb-3 pr-4 font-medium">Price</th>
+                  <th className="pb-3 pr-4 font-medium">Quantity</th>
+                  <th className="pb-3 pr-4 font-medium">Status</th>
+                  <th className="pb-3 font-medium">Added</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {recent.map((product) => (
+                  <tr key={product.id}>
+                    <td className="py-3 pr-4 font-medium text-gray-900">
+                      {product.name}
+                    </td>
+                    <td className="py-3 pr-4 text-gray-700">
+                      {formatNaira(product.price.toNumber())}
+                    </td>
+                    <td className="py-3 pr-4 text-gray-700">
+                      {formatNumber(product.quantity)}
+                    </td>
+                    <td className="py-3 pr-4">
+                      <StockBadge
+                        status={getStockStatus(
+                          product.quantity,
+                          product.lowStockAt
+                        )}
+                      />
+                    </td>
+                    <td className="whitespace-nowrap py-3 text-gray-500">
+                      {product.createdAt.toLocaleDateString("en-NG", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </PageShell>
   );
 }

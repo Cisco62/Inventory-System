@@ -1,103 +1,149 @@
 "use server";
+import { Prisma } from "@prisma/client";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { z } from "zod";
 import { getCurrentUser } from "../auth";
 import { prisma } from "../prisma";
-import { z } from "zod";
 
+const optionalText = z.preprocess(
+  (v) => (typeof v === "string" && v.trim() !== "" ? v.trim() : null),
+  z.string().max(64, "SKU must be 64 characters or fewer").nullable()
+);
+
+const optionalInt = z.preprocess(
+  (v) => (typeof v === "string" && v.trim() !== "" ? v : null),
+  z.coerce
+    .number({ message: "Must be a number" })
+    .int("Must be a whole number")
+    .min(0, "Cannot be negative")
+    .nullable()
+);
 
 const ProductSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  price: z.coerce.number().nonnegative("Price must be non-negative"),
-  quantity: z.coerce.number().int().min(0, "Quantity must be non-negative"),
-  sku: z.string().optional(),
-  lowStockAt: z.coerce.number().int().min(0).optional(),
+  name: z.string().trim().min(1, "Product name is required").max(120),
+  price: z.coerce
+    .number({ message: "Price must be a number" })
+    .nonnegative("Price cannot be negative"),
+  quantity: z.coerce
+    .number({ message: "Quantity must be a number" })
+    .int("Quantity must be a whole number")
+    .min(0, "Quantity cannot be negative"),
+  sku: optionalText,
+  lowStockAt: optionalInt,
 });
 
-export async function deleteProduct(formData: FormData) {
-    const user = await getCurrentUser();
-    const id = String(formData.get("id") || "");
+export type ProductField = keyof z.infer<typeof ProductSchema>;
 
-    await prisma.product.deleteMany({
-        where: {id: id, userId: user.id}
-    });
+export type ProductFormState = {
+  error?: string;
+  fieldErrors?: Partial<Record<ProductField, string>>;
+  values?: Partial<Record<ProductField, string>>;
+};
+
+function readForm(formData: FormData) {
+  const get = (key: ProductField) => String(formData.get(key) ?? "");
+  return {
+    name: get("name"),
+    price: get("price"),
+    quantity: get("quantity"),
+    sku: get("sku"),
+    lowStockAt: get("lowStockAt"),
+  };
 }
 
-export async function updateProduct(formData: FormData) {
+function validate(formData: FormData) {
+  const values = readForm(formData);
+  const parsed = ProductSchema.safeParse(values);
+  if (parsed.success) return { values, data: parsed.data };
+
+  const fieldErrors: ProductFormState["fieldErrors"] = {};
+  for (const issue of parsed.error.issues) {
+    const field = issue.path[0] as ProductField;
+    if (field && !fieldErrors[field]) fieldErrors[field] = issue.message;
+  }
+  return {
+    values,
+    state: {
+      error: "Please fix the highlighted fields.",
+      fieldErrors,
+      values,
+    } satisfies ProductFormState,
+  };
+}
+
+function dbErrorState(
+  error: unknown,
+  values: ProductFormState["values"],
+  action: string
+): ProductFormState {
+  if (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2002"
+  ) {
+    return {
+      error: "Please fix the highlighted fields.",
+      fieldErrors: { sku: "This SKU is already in use. Choose another one." },
+      values,
+    };
+  }
+  console.error(`Product ${action} error:`, error);
+  return { error: `Could not ${action} the product. Please try again.`, values };
+}
+
+export async function deleteProduct(formData: FormData) {
   const user = await getCurrentUser();
   const id = String(formData.get("id") || "");
 
-  const skuValue = formData.get("sku");
-  const lowStockAtValue = formData.get("lowStockAt");
-
-  const parsed = ProductSchema.safeParse({
-    name: formData.get("name"),
-    price: formData.get("price"),
-    quantity: formData.get("quantity"),
-    sku: skuValue && String(skuValue).trim() !== "" ? skuValue : undefined,
-    lowStockAt: lowStockAtValue && String(lowStockAtValue).trim() !== "" ? lowStockAtValue : undefined,
+  await prisma.product.deleteMany({
+    where: { id, userId: user.id },
   });
-
-  if (!parsed.success) {
-    throw new Error("Validation failed");
-  }
-
-  try {
-    await prisma.product.updateMany({
-      where: { id: id, userId: user.id },
-      data: {
-        ...parsed.data,
-      },
-    });
-  } catch (error) {
-    console.error("Product update error:", error);
-    if (error instanceof Error) {
-      if (error.message.includes("Unique constraint") || error.message.includes("sku")) {
-        throw new Error("A product with this SKU already exists.");
-      }
-      throw new Error(`Failed to update product: ${error.message}`);
-    }
-    throw new Error("Failed to update product.");
-  }
+  revalidatePath("/inventory");
+  revalidatePath("/dashboard");
 }
 
-export async function createProduct(formData: FormData) {
+export async function updateProduct(
+  formData: FormData
+): Promise<ProductFormState> {
+  const user = await getCurrentUser();
+  const id = String(formData.get("id") || "");
+
+  const result = validate(formData);
+  if (result.state) return result.state;
+
+  try {
+    const { count } = await prisma.product.updateMany({
+      where: { id, userId: user.id },
+      data: result.data,
+    });
+    if (count === 0) return { error: "This product no longer exists." };
+  } catch (error) {
+    return dbErrorState(error, result.values, "update");
+  }
+
+  revalidatePath("/inventory");
+  revalidatePath("/dashboard");
+  return {};
+}
+
+export async function createProduct(
+  _prevState: ProductFormState,
+  formData: FormData
+): Promise<ProductFormState> {
   const user = await getCurrentUser();
 
-  const skuValue = formData.get("sku");
-  const lowStockAtValue = formData.get("lowStockAt");
-
-  const parsed = ProductSchema.safeParse({
-    name: formData.get("name"),
-    price: formData.get("price"),
-    quantity: formData.get("quantity"),
-    sku: skuValue && String(skuValue).trim() !== "" ? skuValue : undefined,
-    lowStockAt: lowStockAtValue && String(lowStockAtValue).trim() !== "" ? lowStockAtValue : undefined,
-  });
-
-  if (!parsed.success) {
-    throw new Error("Validation failed");
-  }
+  const result = validate(formData);
+  if (result.state) return result.state;
 
   try {
     await prisma.product.create({
-      data: {
-        ...parsed.data,
-        userId: user.id,
-      },
+      data: { ...result.data, userId: user.id },
     });
-    redirect("/inventory?toast=success&message=Product%20added%20successfully");
   } catch (error) {
-    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
-      throw error;
-    }
-    
-    console.error("Product creation error:", error);
-    if (error instanceof Error) {
-      if (error.message.includes("Unique constraint") || error.message.includes("sku")) {
-        throw new Error("A product with this SKU already exists.");
-      }
-      throw new Error(`Failed to create product: ${error.message}`);
-    }
-    throw new Error("Failed to create product.");
+    return dbErrorState(error, result.values, "add");
   }
+
+  revalidatePath("/inventory");
+  revalidatePath("/dashboard");
+  redirect("/inventory?toast=success&message=Product%20added%20successfully");
 }

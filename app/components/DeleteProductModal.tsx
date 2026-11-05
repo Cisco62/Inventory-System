@@ -1,15 +1,17 @@
 "use client";
 
-import { Trash2, X } from "lucide-react";
+import { Loader2, Trash2, X } from "lucide-react";
 
 interface DeleteProductModalProps {
   productName: string;
+  pending?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
 export default function DeleteProductModal({
   productName,
+  pending = false,
   onConfirm,
   onCancel,
 }: DeleteProductModalProps) {
@@ -37,6 +39,7 @@ export default function DeleteProductModal({
             </div>
             <button
               onClick={onCancel}
+              aria-label="Close"
               className="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
@@ -45,22 +48,25 @@ export default function DeleteProductModal({
 
           <p className="text-gray-600 mb-6">
             Are you sure you want to delete{" "}
-            <span className="font-semibold text-gray-900">"{productName}"</span>?
+            <span className="font-semibold text-gray-900">&ldquo;{productName}&rdquo;</span>?
             This action cannot be undone.
           </p>
 
           <div className="flex gap-3 justify-end">
             <button
               onClick={onCancel}
-              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors cursor-pointer"
+              disabled={pending}
+              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors cursor-pointer disabled:opacity-60"
             >
               Cancel
             </button>
             <button
               onClick={onConfirm}
-              className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors cursor-pointer"
+              disabled={pending}
+              className="inline-flex items-center gap-2 px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Yes, Delete
+              {pending && <Loader2 className="w-4 h-4 animate-spin" />}
+              {pending ? "Deleting…" : "Yes, Delete"}
             </button>
           </div>
         </div>

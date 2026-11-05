@@ -3,9 +3,9 @@
 import { Pencil } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { updateProduct } from "../lib/actions/products";
-import UpdateProductModal from "./UpdateProductModal";
 import toast from "react-hot-toast";
+import { updateProduct, type ProductFormState } from "../lib/actions/products";
+import UpdateProductModal from "./UpdateProductModal";
 
 interface Product {
   id: string;
@@ -16,31 +16,31 @@ interface Product {
   lowStockAt: number | null;
 }
 
-interface UpdateProductButtonProps {
-  product: Product;
-}
-
-export default function UpdateProductButton({
-  product,
-}: UpdateProductButtonProps) {
+export default function UpdateProductButton({ product }: { product: Product }) {
   const [showModal, setShowModal] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [state, setState] = useState<ProductFormState>({});
   const router = useRouter();
+
+  const open = () => {
+    setState({});
+    setShowModal(true);
+  };
 
   const handleUpdate = async (formData: FormData) => {
     setIsUpdating(true);
     try {
-      await updateProduct(formData);
-      toast.success("Product updated successfully", { duration: 4000 });
-      router.refresh();
+      const result = await updateProduct(formData);
+      if (result.error) {
+        setState(result);
+        return;
+      }
+      toast.success("Product updated successfully");
       setShowModal(false);
+      router.refresh();
     } catch (error) {
       console.error("Error updating product:", error);
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to update product"
-      );
+      setState({ error: "Could not update the product. Please try again." });
     } finally {
       setIsUpdating(false);
     }
@@ -50,22 +50,23 @@ export default function UpdateProductButton({
     <>
       <button
         type="button"
-        onClick={() => setShowModal(true)}
-        className="text-blue-600 hover:text-blue-900 cursor-pointer p-1 rounded hover:bg-blue-50 transition-colors"
-        title="Update product"
-        disabled={isUpdating}
+        onClick={open}
+        className="rounded p-1 text-blue-600 transition-colors hover:bg-blue-50 hover:text-blue-900 cursor-pointer"
+        title="Edit product"
+        aria-label={`Edit ${product.name}`}
       >
-        <Pencil className="w-5 h-5" />
+        <Pencil className="h-5 w-5" />
       </button>
 
       {showModal && (
         <UpdateProductModal
           product={product}
+          state={state}
+          pending={isUpdating}
           onConfirm={handleUpdate}
-          onCancel={() => setShowModal(false)}
+          onCancel={() => !isUpdating && setShowModal(false)}
         />
       )}
     </>
   );
 }
-

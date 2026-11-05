@@ -16,13 +16,12 @@ interface ChartData {
 }
 
 export default function ProductsChart({ data }: { data: ChartData[] }) {
-  console.log(data);
   return (
-    <div className="h-48 w-full">
+    <div className="h-full w-full">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart
           data={data}
-          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+          margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
           <XAxis
@@ -33,6 +32,8 @@ export default function ProductsChart({ data }: { data: ChartData[] }) {
             axisLine={false}
           />
           <YAxis
+            allowDecimals={false}
+            width={30}
             stroke="#666"
             fontSize={12}
             tickLine={false}

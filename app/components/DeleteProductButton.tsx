@@ -26,14 +26,14 @@ export default function DeleteProductButton({
       const formData = new FormData();
       formData.append("id", productId);
       await deleteProduct(formData);
-      toast.success("Product deleted successfully", { duration: 4000 });
+      toast.success("Product deleted successfully");
+      setShowModal(false);
       router.refresh();
     } catch (error) {
       console.error("Error deleting product:", error);
-      toast.error("Failed to delete product");
+      toast.error("Failed to delete product. Please try again.");
     } finally {
       setIsDeleting(false);
-      setShowModal(false);
     }
   };
 
@@ -44,7 +44,7 @@ export default function DeleteProductButton({
         onClick={() => setShowModal(true)}
         className="text-red-600 hover:text-red-900 cursor-pointer p-1 rounded hover:bg-red-50 transition-colors"
         title="Delete product"
-        disabled={isDeleting}
+        aria-label={`Delete ${productName}`}
       >
         <Trash2 className="w-5 h-5" />
       </button>
@@ -52,8 +52,9 @@ export default function DeleteProductButton({
       {showModal && (
         <DeleteProductModal
           productName={productName}
+          pending={isDeleting}
           onConfirm={handleDelete}
-          onCancel={() => setShowModal(false)}
+          onCancel={() => !isDeleting && setShowModal(false)}
         />
       )}
     </>

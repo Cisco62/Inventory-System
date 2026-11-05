@@ -3,7 +3,12 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 async function main() {
-    const demoUserId = "ffadf167-aea3-40b4-b516-b9f3d42a5dd6";
+    // Stack Auth user ID to own the sample products, e.g.
+    // SEED_USER_ID=<your-user-id> npx prisma db seed
+    const demoUserId = process.env.SEED_USER_ID;
+    if (!demoUserId) {
+        throw new Error("Set SEED_USER_ID to the Stack Auth user ID that should own the sample products.");
+    }
 
     //Create sample products
     await prisma.product.createMany({
