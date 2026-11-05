@@ -1,6 +1,8 @@
 "use client";
 
+import { AlertCircle } from "lucide-react";
 import type { ProductField, ProductFormState } from "../lib/actions/products";
+import { inputClass } from "./ui";
 
 type Values = Partial<Record<ProductField, string>>;
 
@@ -19,27 +21,19 @@ function Field({
 }) {
   return (
     <div>
-      <label htmlFor={id} className="mb-2 block text-sm font-medium text-gray-700">
+      <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-slate-700">
         {label}
       </label>
       {children}
       {error ? (
-        <p id={`${id}-error`} className="mt-1 text-sm text-red-600">
+        <p id={`${id}-error`} className="mt-1.5 text-sm text-red-600">
           {error}
         </p>
       ) : (
-        hint && <p className="mt-1 text-xs text-gray-500">{hint}</p>
+        hint && <p className="mt-1.5 text-xs text-slate-500">{hint}</p>
       )}
     </div>
   );
-}
-
-function inputClass(hasError: boolean) {
-  return `w-full rounded-lg border px-4 py-2 focus:outline-none focus:ring-2 ${
-    hasError
-      ? "border-red-400 focus:ring-red-200"
-      : "border-gray-300 focus:border-blue-500 focus:ring-blue-100"
-  }`;
 }
 
 export function FormError({ message }: { message?: string }) {
@@ -47,8 +41,9 @@ export function FormError({ message }: { message?: string }) {
   return (
     <div
       role="alert"
-      className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+      className="flex items-start gap-2.5 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 ring-1 ring-inset ring-red-200"
     >
+      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
       {message}
     </div>
   );
@@ -80,11 +75,11 @@ export default function ProductFields({
 
   return (
     <>
-      <Field id="name" label="Product Name *" error={errors.name}>
+      <Field id="name" label="Product name *" error={errors.name}>
         <input type="text" required placeholder="Enter product name" {...a11y("name")} />
       </Field>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <Field id="quantity" label="Quantity *" error={errors.quantity}>
           <input type="number" min="0" step="1" required placeholder="0" {...a11y("quantity")} />
         </Field>
@@ -93,23 +88,25 @@ export default function ProductFields({
         </Field>
       </div>
 
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
       <Field
         id="sku"
         label="SKU (optional)"
         error={errors.sku}
-        hint="A unique code you use to identify this product."
+        hint="Your own code for this product."
       >
         <input type="text" placeholder="e.g. TSHIRT-RED-M" {...a11y("sku")} />
       </Field>
 
       <Field
         id="lowStockAt"
-        label="Low Stock At (optional)"
+        label="Low stock alert (optional)"
         error={errors.lowStockAt}
-        hint="Flag as low stock at or below this quantity. Defaults to 5."
+        hint="Marked low at or below this. Default 5."
       >
         <input type="number" min="0" step="1" placeholder="5" {...a11y("lowStockAt")} />
       </Field>
+      </div>
     </>
   );
 }

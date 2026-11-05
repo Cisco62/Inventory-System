@@ -1,23 +1,25 @@
 import { STOCK_STATUS_LABELS, type StockStatus } from "../lib/inventory";
 
 const styles: Record<StockStatus, string> = {
-  in: "bg-green-50 text-green-700 ring-green-600/20",
-  low: "bg-yellow-50 text-yellow-800 ring-yellow-600/20",
+  in: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
+  low: "bg-amber-50 text-amber-800 ring-amber-600/20",
   out: "bg-red-50 text-red-700 ring-red-600/20",
 };
 
 const dots: Record<StockStatus, string> = {
-  in: "bg-green-500",
-  low: "bg-yellow-500",
-  out: "bg-red-500",
+  in: "fill-emerald-500",
+  low: "fill-amber-500",
+  out: "fill-red-500",
 };
 
 export default function StockBadge({ status }: { status: StockStatus }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset whitespace-nowrap ${styles[status]}`}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${styles[status]}`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${dots[status]}`} />
+      <svg viewBox="0 0 6 6" aria-hidden="true" className={`h-1.5 w-1.5 ${dots[status]}`}>
+        <circle cx="3" cy="3" r="3" />
+      </svg>
       {STOCK_STATUS_LABELS[status]}
     </span>
   );

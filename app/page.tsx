@@ -1,89 +1,110 @@
 import Link from "next/link";
-import { BarChart3, Bell, FileDown, Package } from "lucide-react";
+import {
+  ArrowRight,
+  BarChart3,
+  Bell,
+  Check,
+  FileDown,
+  Package,
+} from "lucide-react";
 import { stackServerApp } from "@/stack/server";
+import { BrandMark } from "./components/Sidebar";
+import { buttonClass, IconTile } from "./components/ui";
 
 const features = [
   {
     icon: Package,
-    title: "Track every product",
-    text: "Keep names, SKUs, prices and quantities in one searchable list.",
+    title: "Every product in one place",
+    text: "Names, SKUs, prices and quantities in a fast, searchable list.",
   },
   {
     icon: Bell,
-    title: "Catch low stock early",
+    title: "Low stock alerts",
     text: "Set a threshold per product and see what needs restocking at a glance.",
   },
   {
     icon: BarChart3,
-    title: "See the big picture",
-    text: "Dashboards for total value, stock health and new products over time.",
+    title: "Clear insights",
+    text: "Inventory value, stock health and new products over time.",
   },
   {
     icon: FileDown,
-    title: "Export anytime",
-    text: "Download your inventory as a CSV for spreadsheets or accounting.",
+    title: "Export to CSV",
+    text: "Download your inventory for spreadsheets or accounting in one click.",
   },
 ];
+
+const points = ["Works on any device", "Secure sign-in", "Export your data anytime"];
 
 export default async function Home() {
   const user = await stackServerApp.getUser();
   const cta = user
-    ? { href: "/dashboard", label: "Go to Dashboard" }
-    : { href: "/sign-in", label: "Get Started" };
+    ? { href: "/dashboard", label: "Go to dashboard" }
+    : { href: "/sign-in", label: "Get started" };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-100">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-6 sm:px-6">
-        <div className="flex items-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600">
-            <BarChart3 className="h-5 w-5 text-white" />
-          </span>
-          <span className="text-lg font-semibold text-gray-900">
-            Inventory System
-          </span>
-        </div>
-        <Link
-          href={user ? "/dashboard" : "/sign-in"}
-          className="text-sm font-medium text-gray-700 hover:text-blue-700"
-        >
+    <div className="relative min-h-screen overflow-hidden bg-white">
+      {/* Soft background glow */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 -top-40 -z-0 flex justify-center blur-3xl"
+      >
+        <div className="aspect-[3/2] w-[56rem] bg-gradient-to-tr from-indigo-200 via-sky-100 to-violet-200 opacity-60 [clip-path:polygon(25%_0%,100%_20%,85%_100%,0%_75%)]" />
+      </div>
+
+      <header className="relative mx-auto flex max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
+        <BrandMark href="/" />
+        <Link href={cta.href} className={buttonClass("secondary", "sm")}>
           {user ? "Dashboard" : "Sign in"}
         </Link>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 pb-20 pt-12 sm:px-6 sm:pt-20">
+      <main className="relative mx-auto max-w-6xl px-4 pb-24 pt-16 sm:px-6 sm:pt-24">
         <div className="mx-auto max-w-3xl text-center">
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">
-            Inventory management that stays out of your way
+          <span className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700 ring-1 ring-inset ring-indigo-600/10">
+            Inventory management, simplified
+          </span>
+          <h1 className="mt-6 text-4xl font-semibold tracking-tight text-slate-900 sm:text-6xl">
+            Know what&rsquo;s in stock.{" "}
+            <span className="text-indigo-600">Always.</span>
           </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-lg text-gray-600 sm:text-xl">
-            Track products, monitor stock levels, and know exactly what your
-            inventory is worth, all in one place.
+          <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-600">
+            Track products, catch low stock before it becomes a problem, and see
+            exactly what your inventory is worth, all in one place.
           </p>
-          <div className="mt-10 flex justify-center">
-            <Link
-              href={cta.href}
-              className="rounded-lg bg-blue-600 px-8 py-3 font-semibold text-white shadow-sm transition-colors hover:bg-blue-700"
-            >
+          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+            <Link href={cta.href} className={buttonClass("primary", "lg")}>
               {cta.label}
+              <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
+          <ul className="mt-8 flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-slate-500">
+            {points.map((p) => (
+              <li key={p} className="flex items-center gap-1.5">
+                <Check className="h-4 w-4 text-emerald-500" />
+                {p}
+              </li>
+            ))}
+          </ul>
         </div>
 
-        <div className="mt-20 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {features.map(({ icon: Icon, title, text }) => (
+        <div className="mt-24 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {features.map(({ icon, title, text }) => (
             <div
               key={title}
-              className="rounded-xl border border-gray-200 bg-white/80 p-6 shadow-sm backdrop-blur"
+              className="rounded-2xl border border-slate-200/80 bg-white/80 p-6 shadow-sm backdrop-blur"
             >
-              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100">
-                <Icon className="h-5 w-5 text-blue-600" />
-              </span>
-              <h2 className="mt-4 font-semibold text-gray-900">{title}</h2>
-              <p className="mt-2 text-sm text-gray-600">{text}</p>
+              <IconTile icon={icon} />
+              <h2 className="mt-5 font-semibold text-slate-900">{title}</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">{text}</p>
             </div>
           ))}
         </div>
       </main>
+
+      <footer className="relative border-t border-slate-100 py-8 text-center text-sm text-slate-400">
+        © {new Date().getFullYear()} Inventory System
+      </footer>
     </div>
   );
 }

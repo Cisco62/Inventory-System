@@ -19,45 +19,52 @@ export default function ProductsChart({ data }: { data: ChartData[] }) {
   return (
     <div className="h-full w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart
-          data={data}
-          margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+        <AreaChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+          <defs>
+            <linearGradient id="productsFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#6366f1" stopOpacity={0.25} />
+              <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid vertical={false} stroke="#eef2f7" />
           <XAxis
             dataKey="week"
-            stroke="#666"
+            stroke="#94a3b8"
+            fontSize={12}
+            tickLine={false}
+            axisLine={false}
+            tickMargin={8}
+            minTickGap={16}
+          />
+          <YAxis
+            allowDecimals={false}
+            width={36}
+            stroke="#94a3b8"
             fontSize={12}
             tickLine={false}
             axisLine={false}
           />
-          <YAxis
-            allowDecimals={false}
-            width={30}
-            stroke="#666"
-            fontSize={12}
-            tickLine={false}
-            axisLine={false}
+          <Tooltip
+            cursor={{ stroke: "#c7d2fe", strokeWidth: 1 }}
+            formatter={(value) => [value, "New products"]}
+            labelFormatter={(label) => `Week of ${label}`}
+            contentStyle={{
+              backgroundColor: "white",
+              border: "1px solid #e2e8f0",
+              borderRadius: "10px",
+              boxShadow: "0 4px 12px -2px rgba(15, 23, 42, 0.08)",
+              fontSize: 13,
+            }}
+            labelStyle={{ color: "#0f172a", fontWeight: 600, marginBottom: 2 }}
           />
           <Area
             type="monotone"
             dataKey="products"
-            stroke="#3b82f6"
-            fill="#3b82f6"
-            fillOpacity={0.2}
+            stroke="#4f46e5"
             strokeWidth={2}
-            dot={{ fill: "#3b82f6", r: 2 }}
-            activeDot={{ fill: "#3b82f6", r: 4 }}
-          />
-
-          <Tooltip
-            contentStyle={{
-              backgroundColor: "white",
-              border: "1px solid #e5e7eb",
-              borderRadius: "8px",
-              boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
-            }}
-            labelStyle={{ color: "#374151", fontWeight: 500 }}
+            fill="url(#productsFill)"
+            dot={false}
+            activeDot={{ fill: "#4f46e5", stroke: "white", strokeWidth: 2, r: 5 }}
           />
         </AreaChart>
       </ResponsiveContainer>

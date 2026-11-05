@@ -51,11 +51,11 @@ export default function UpdateProductButton({ product }: { product: Product }) {
       <button
         type="button"
         onClick={open}
-        className="rounded p-1 text-blue-600 transition-colors hover:bg-blue-50 hover:text-blue-900 cursor-pointer"
+        className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-indigo-50 hover:text-indigo-600 cursor-pointer"
         title="Edit product"
         aria-label={`Edit ${product.name}`}
       >
-        <Pencil className="h-5 w-5" />
+        <Pencil className="h-4 w-4" />
       </button>
 
       {showModal && (

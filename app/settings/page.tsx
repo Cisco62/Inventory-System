@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { AccountSettings } from "@stackframe/stack";
 import PageShell from "../components/PageShell";
+import { Card } from "../components/ui";
 import { getCurrentUser } from "../lib/auth";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -11,13 +12,13 @@ export default async function SettingsPage() {
   return (
     <PageShell
       title="Settings"
-      description="Manage your account settings and preferences."
+      description="Manage your profile, sign-in methods and security."
     >
-      <div className="max-w-6xl">
-        <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
+      <Card padded={false} className="overflow-hidden">
+        <div className="p-2 sm:p-4">
           <AccountSettings fullPage />
         </div>
-      </div>
+      </Card>
     </PageShell>
   );
 }

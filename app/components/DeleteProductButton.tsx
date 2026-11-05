@@ -42,11 +42,11 @@ export default function DeleteProductButton({
       <button
         type="button"
         onClick={() => setShowModal(true)}
-        className="text-red-600 hover:text-red-900 cursor-pointer p-1 rounded hover:bg-red-50 transition-colors"
+        className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 cursor-pointer"
         title="Delete product"
         aria-label={`Delete ${productName}`}
       >
-        <Trash2 className="w-5 h-5" />
+        <Trash2 className="h-4 w-4" />
       </button>
 
       {showModal && (

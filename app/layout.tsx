@@ -15,6 +15,16 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Match Stack Auth's sign-in and account screens to the app's indigo accent.
+const stackTheme = {
+  light: {
+    primary: "hsl(243 75% 59%)",
+    primaryForeground: "hsl(0 0% 100%)",
+    ring: "hsl(243 75% 59%)",
+  },
+  radius: "0.5rem",
+};
+
 export const metadata: Metadata = {
   title: {
     default: "Inventory System",
@@ -32,15 +42,24 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} bg-slate-50 text-slate-900 antialiased`}
       >
         <StackProvider app={stackClientApp}>
-          <StackTheme>
+          <StackTheme theme={stackTheme}>
             {children}
             <Toaster
               position="top-right"
               toastOptions={{
                 duration: 4000,
+                style: {
+                  borderRadius: "10px",
+                  border: "1px solid #e2e8f0",
+                  boxShadow: "0 8px 24px -6px rgba(15, 23, 42, 0.15)",
+                  color: "#0f172a",
+                  fontSize: "14px",
+                },
+                success: { iconTheme: { primary: "#10b981", secondary: "#fff" } },
+                error: { iconTheme: { primary: "#ef4444", secondary: "#fff" } },
               }}
             />
           </StackTheme>
