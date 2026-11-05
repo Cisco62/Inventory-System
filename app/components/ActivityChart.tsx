@@ -1,31 +1,27 @@
 "use client";
 
 import {
-  Area,
-  AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
+  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 
-interface ChartData {
+export interface ActivityPoint {
   week: string;
-  products: number;
+  received: number;
+  sold: number;
 }
 
-export default function ProductsChart({ data }: { data: ChartData[] }) {
+export default function ActivityChart({ data }: { data: ActivityPoint[] }) {
   return (
     <div className="h-full w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
-          <defs>
-            <linearGradient id="productsFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#6366f1" stopOpacity={0.25} />
-              <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
-            </linearGradient>
-          </defs>
+        <BarChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }} barGap={2}>
           <CartesianGrid vertical={false} stroke="#eef2f7" />
           <XAxis
             dataKey="week"
@@ -45,9 +41,9 @@ export default function ProductsChart({ data }: { data: ChartData[] }) {
             axisLine={false}
           />
           <Tooltip
-            cursor={{ stroke: "#c7d2fe", strokeWidth: 1 }}
-            formatter={(value) => [value, "New products"]}
+            cursor={{ fill: "#f1f5f9" }}
             labelFormatter={(label) => `Week of ${label}`}
+            formatter={(value, name) => [`${value} units`, name]}
             contentStyle={{
               backgroundColor: "white",
               border: "1px solid #e2e8f0",
@@ -57,16 +53,16 @@ export default function ProductsChart({ data }: { data: ChartData[] }) {
             }}
             labelStyle={{ color: "#0f172a", fontWeight: 600, marginBottom: 2 }}
           />
-          <Area
-            type="monotone"
-            dataKey="products"
-            stroke="#4f46e5"
-            strokeWidth={2}
-            fill="url(#productsFill)"
-            dot={false}
-            activeDot={{ fill: "#4f46e5", stroke: "white", strokeWidth: 2, r: 5 }}
+          <Legend
+            verticalAlign="top"
+            align="right"
+            iconType="circle"
+            iconSize={8}
+            wrapperStyle={{ fontSize: 12, paddingBottom: 8, color: "#475569" }}
           />
-        </AreaChart>
+          <Bar dataKey="received" name="Received" fill="#6366f1" radius={[4, 4, 0, 0]} maxBarSize={18} />
+          <Bar dataKey="sold" name="Sold" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={18} />
+        </BarChart>
       </ResponsiveContainer>
     </div>
   );

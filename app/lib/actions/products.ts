@@ -112,16 +112,38 @@ export async function updateProduct(
   if (result.state) return result.state;
 
   try {
-    const { count } = await prisma.product.updateMany({
-      where: { id, userId: user.id },
-      data: result.data,
+    const found = await prisma.$transaction(async (tx) => {
+      const before = await tx.product.findFirst({
+        where: { id, userId: user.id },
+        select: { quantity: true },
+      });
+      if (!before) return false;
+
+      await tx.product.update({ where: { id }, data: result.data });
+
+      // Editing the quantity directly is logged as a correction.
+      const change = result.data.quantity - before.quantity;
+      if (change !== 0) {
+        await tx.stockMovement.create({
+          data: {
+            userId: user.id,
+            productId: id,
+            type: "ADJUSTED",
+            change,
+            quantityAfter: result.data.quantity,
+            note: "Quantity edited",
+          },
+        });
+      }
+      return true;
     });
-    if (count === 0) return { error: "This product no longer exists." };
+    if (!found) return { error: "This product no longer exists." };
   } catch (error) {
     return dbErrorState(error, result.values, "update");
   }
 
   revalidatePath("/inventory");
+  revalidatePath(`/inventory/${id}`);
   revalidatePath("/dashboard");
   return {};
 }
@@ -137,7 +159,19 @@ export async function createProduct(
 
   try {
     await prisma.product.create({
-      data: { ...result.data, userId: user.id },
+      data: {
+        ...result.data,
+        userId: user.id,
+        movements: {
+          create: {
+            userId: user.id,
+            type: "INITIAL",
+            change: result.data.quantity,
+            quantityAfter: result.data.quantity,
+            note: "Opening stock",
+          },
+        },
+      },
     });
   } catch (error) {
     return dbErrorState(error, result.values, "add");

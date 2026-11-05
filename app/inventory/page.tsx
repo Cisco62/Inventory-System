@@ -7,6 +7,7 @@ import PageSizeSelect from "../components/PageSizeSelect";
 import { PAGE_SIZES, parsePageSize } from "../lib/pagination";
 import PageShell from "../components/PageShell";
 import StockBadge from "../components/StockBadge";
+import AdjustStockButton from "../components/AdjustStockButton";
 import DeleteProductButton from "../components/DeleteProductButton";
 import UpdateProductButton from "../components/UpdateProductButton";
 import ToastListener from "../components/ToastListener";
@@ -214,7 +215,12 @@ export default async function InventoryPage({
                 <li key={product.id} className="flex items-start gap-3 p-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <p className="truncate font-medium text-slate-900">{product.name}</p>
+                      <Link
+                        href={`/inventory/${product.id}`}
+                        className="truncate font-medium text-slate-900 hover:text-indigo-600"
+                      >
+                        {product.name}
+                      </Link>
                     </div>
                     {product.sku && (
                       <p className="mt-0.5 font-mono text-xs text-slate-500">{product.sku}</p>
@@ -230,6 +236,7 @@ export default async function InventoryPage({
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
+                    <AdjustStockButton product={editable} />
                     <UpdateProductButton product={editable} />
                     <DeleteProductButton productId={product.id} productName={product.name} />
                   </div>
@@ -256,7 +263,12 @@ export default async function InventoryPage({
                   {rows.map(({ product, status: s, editable }) => (
                     <tr key={product.id} className="transition-colors hover:bg-slate-50/70">
                       <td className="px-5 py-3.5 sm:pl-6">
-                        <p className="font-medium text-slate-900">{product.name}</p>
+                        <Link
+                          href={`/inventory/${product.id}`}
+                          className="font-medium text-slate-900 hover:text-indigo-600"
+                        >
+                          {product.name}
+                        </Link>
                         <p className="font-mono text-xs text-slate-500">
                           {product.sku || "No SKU"}
                         </p>
@@ -275,6 +287,7 @@ export default async function InventoryPage({
                       </td>
                       <td className="px-5 py-3.5 sm:pr-6">
                         <div className="flex items-center justify-end gap-1">
+                          <AdjustStockButton product={editable} />
                           <UpdateProductButton product={editable} />
                           <DeleteProductButton productId={product.id} productName={product.name} />
                         </div>

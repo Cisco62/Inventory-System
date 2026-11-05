@@ -10,11 +10,14 @@ import toast from "react-hot-toast";
 interface DeleteProductButtonProps {
   productId: string;
   productName: string;
+  /** Where to go after deleting (e.g. back to the list from a detail page). */
+  redirectTo?: string;
 }
 
 export default function DeleteProductButton({
   productId,
   productName,
+  redirectTo,
 }: DeleteProductButtonProps) {
   const [showModal, setShowModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -26,9 +29,10 @@ export default function DeleteProductButton({
       const formData = new FormData();
       formData.append("id", productId);
       await deleteProduct(formData);
-      toast.success("Product deleted successfully");
+      toast.success(`Deleted ${productName}`);
       setShowModal(false);
-      router.refresh();
+      if (redirectTo) router.push(redirectTo);
+      else router.refresh();
     } catch (error) {
       console.error("Error deleting product:", error);
       toast.error("Failed to delete product. Please try again.");
@@ -60,4 +64,3 @@ export default function DeleteProductButton({
     </>
   );
 }
-

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
+  Activity,
   AlertTriangle,
   ArrowRight,
   Banknote,
@@ -9,7 +10,9 @@ import {
   Plus,
 } from "lucide-react";
 import PageShell from "../components/PageShell";
-import ProductsChart from "../components/Products-Chart";
+import ActivityChart from "../components/ActivityChart";
+import AdjustStockButton from "../components/AdjustStockButton";
+import MovementList from "../components/MovementList";
 import StockBadge from "../components/StockBadge";
 import {
   buttonClass,
@@ -34,19 +37,34 @@ export const metadata: Metadata = { title: "Dashboard" };
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEKS_SHOWN = 12;
 
-/** Count dates into the last WEEKS_SHOWN seven-day windows ending now. */
-function countByWeek(dates: Date[], now = Date.now()) {
+/** Start of the window shown in the activity chart. */
+function chartStart() {
+  return new Date(Date.now() - WEEKS_SHOWN * 7 * DAY_MS);
+}
+
+/** Units received and sold in each of the last WEEKS_SHOWN seven-day windows. */
+function activityByWeek(
+  movements: { type: string; change: number; createdAt: Date }[],
+  now = Date.now()
+) {
   return Array.from({ length: WEEKS_SHOWN }, (_, idx) => {
     const weeksAgo = WEEKS_SHOWN - 1 - idx;
     const end = now - weeksAgo * 7 * DAY_MS;
     const start = end - 7 * DAY_MS;
-    const startDate = new Date(start + DAY_MS);
+    const inWeek = movements.filter((m) => {
+      const t = m.createdAt.getTime();
+      return t > start && t <= end;
+    });
+    const total = (type: string) =>
+      inWeek.filter((m) => m.type === type).reduce((sum, m) => sum + Math.abs(m.change), 0);
     return {
-      week: startDate.toLocaleDateString("en-NG", { day: "numeric", month: "short" }),
-      products: dates.filter((d) => {
-        const t = d.getTime();
-        return t > start && t <= end;
-      }).length,
+      week: new Date(start + DAY_MS).toLocaleDateString("en-NG", {
+        day: "numeric",
+        month: "short",
+        timeZone: "Africa/Lagos",
+      }),
+      received: total("RECEIVED"),
+      sold: total("SOLD"),
     };
   });
 }
@@ -111,24 +129,31 @@ export default async function DashboardPage() {
   const user = await getCurrentUser();
   const userId = user.id;
 
-  const [totalProducts, lowStockCount, outOfStockCount, allProducts, lowest, recent] =
+  const since = chartStart();
+
+  const [totalProducts, lowStockCount, outOfStockCount, allProducts, lowest, recentActivity, chartMovements] =
     await Promise.all([
       prisma.product.count({ where: { userId } }),
       prisma.product.count({ where: { userId, ...stockStatusWhere("low") } }),
       prisma.product.count({ where: { userId, ...stockStatusWhere("out") } }),
       prisma.product.findMany({
         where: { userId },
-        select: { price: true, quantity: true, createdAt: true },
+        select: { price: true, quantity: true },
       }),
       prisma.product.findMany({
         where: { userId },
         orderBy: [{ quantity: "asc" }, { name: "asc" }],
         take: 5,
       }),
-      prisma.product.findMany({
+      prisma.stockMovement.findMany({
         where: { userId },
         orderBy: { createdAt: "desc" },
-        take: 5,
+        take: 6,
+        include: { product: { select: { id: true, name: true } } },
+      }),
+      prisma.stockMovement.findMany({
+        where: { userId, type: { in: ["RECEIVED", "SOLD"] }, createdAt: { gt: since } },
+        select: { type: true, change: true, createdAt: true },
       }),
     ]);
 
@@ -140,8 +165,9 @@ export default async function DashboardPage() {
   );
   const percent = (count: number) =>
     totalProducts > 0 ? Math.round((count / totalProducts) * 100) : 0;
-  const weeklyProductsData = countByWeek(allProducts.map((p) => p.createdAt));
-  const addedThisPeriod = weeklyProductsData.reduce((s, w) => s + w.products, 0);
+  const activity = activityByWeek(chartMovements);
+  const soldThisPeriod = activity.reduce((s, w) => s + w.sold, 0);
+  const receivedThisPeriod = activity.reduce((s, w) => s + w.received, 0);
 
   const stats = [
     {
@@ -227,12 +253,22 @@ export default async function DashboardPage() {
       <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader
-            title="New products"
-            subtitle={`${formatNumber(addedThisPeriod)} added in the last ${WEEKS_SHOWN} weeks`}
+            title="Stock activity"
+            subtitle={`Last ${WEEKS_SHOWN} weeks: ${formatNumber(receivedThisPeriod)} units received, ${formatNumber(soldThisPeriod)} sold`}
           />
-          <div className="h-64">
-            <ProductsChart data={weeklyProductsData} />
-          </div>
+          {chartMovements.length === 0 ? (
+            <div className="flex h-64 items-center justify-center">
+              <EmptyState
+                icon={Activity}
+                title="No deliveries or sales recorded yet"
+                description="Use “Adjust stock” on a product to record what you receive and sell. Your weekly activity will appear here."
+              />
+            </div>
+          ) : (
+            <div className="h-64">
+              <ActivityChart data={activity} />
+            </div>
+          )}
         </Card>
 
         <Card>
@@ -308,13 +344,22 @@ export default async function DashboardPage() {
                 <li key={product.id} className="flex items-center gap-3 px-5 py-3 sm:px-6">
                   <ProductInitial name={product.name} />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-slate-900">{product.name}</p>
+                    <Link
+                      href={`/inventory/${product.id}`}
+                      className="block truncate text-sm font-medium text-slate-900 hover:text-indigo-600"
+                    >
+                      {product.name}
+                    </Link>
                     <p className="text-xs text-slate-500">
                       {formatNumber(product.quantity)} units · alert at{" "}
                       {product.lowStockAt ?? DEFAULT_LOW_STOCK_AT}
                     </p>
                   </div>
                   <StockBadge status={getStockStatus(product.quantity, product.lowStockAt)} />
+                  <AdjustStockButton
+                    initialType="RECEIVED"
+                    product={{ id: product.id, name: product.name, quantity: product.quantity }}
+                  />
                 </li>
               ))}
             </ul>
@@ -323,45 +368,16 @@ export default async function DashboardPage() {
 
         <Card padded={false}>
           <div className="px-5 pt-5 sm:px-6 sm:pt-6">
-            <CardHeader
-              title="Recently added"
-              subtitle="Latest products in your inventory"
-              action={<ViewAll show={totalProducts > 0} />}
-            />
+            <CardHeader title="Recent activity" subtitle="Latest stock changes across products" />
           </div>
-          {recent.length === 0 ? (
+          {recentActivity.length === 0 ? (
             <EmptyState
-              icon={Package}
-              title="No products added yet"
-              description="Products you add will show up here."
+              icon={Activity}
+              title="No activity yet"
+              description="Deliveries, sales and corrections will show up here."
             />
           ) : (
-            <ul className="divide-y divide-slate-100 border-t border-slate-100">
-              {recent.map((product) => (
-                <li key={product.id} className="flex items-center gap-3 px-5 py-3 sm:px-6">
-                  <ProductInitial name={product.name} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-slate-900">{product.name}</p>
-                    <p className="text-xs text-slate-500">
-                      Added{" "}
-                      {product.createdAt.toLocaleDateString("en-NG", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium tabular-nums text-slate-900">
-                      {formatNaira(product.price.toNumber())}
-                    </p>
-                    <p className="text-xs tabular-nums text-slate-500">
-                      {formatNumber(product.quantity)} units
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <MovementList movements={recentActivity} showProduct />
           )}
         </Card>
       </div>

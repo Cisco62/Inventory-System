@@ -25,7 +25,34 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  movements StockMovement[]
+
   @@unique([userId, sku])
   @@index ([userId, name])
   @@index ([createdAt])
+}
+
+enum MovementType {
+  INITIAL  // opening stock when the product was added
+  RECEIVED // restock / delivery
+  SOLD
+  DAMAGED  // damaged, expired or lost
+  ADJUSTED // manual correction (e.g. quantity edited or stock count)
+}
+
+model StockMovement {
+  id            String       @id @default(cuid())
+  userId        String
+  productId     String
+  product       Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  type          MovementType
+  /// Signed change in quantity: positive adds stock, negative removes it.
+  change        Int
+  /// Product quantity right after this movement.
+  quantityAfter Int
+  note          String?
+  createdAt     DateTime     @default(now())
+
+  @@index([userId, createdAt])
+  @@index([productId, createdAt])
 }
